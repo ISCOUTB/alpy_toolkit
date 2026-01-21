@@ -13,8 +13,8 @@ defined('MOODLE_INTERNAL') || die();
 $plugin->version = 2026012000; // YYYYMMDDXX (year, month, day, 2-digit version number).
 $plugin->requires = 2022041900; // Moodle 4.0+
 $plugin->component = 'local_alpy_toolkit';
-$plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '1.0.0';
+$plugin->maturity = MATURITY_ALPHA;
+$plugin->release = '1.0.0';
 
 $plugin->dependencies = [
     'format_alpy' => 2026012000,
