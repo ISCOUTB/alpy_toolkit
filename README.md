@@ -41,8 +41,8 @@ El plugin incluye un endpoint de estilos dinámicos que reemplaza los iconos de 
 
 ## Requisitos
 
-- **Moodle 4.1** o superior.
-- Plugin **Format Alpy** (`format_alpy`) instalado y configurado.
+- **Moodle 4.0** o superior.
+- Plugin **Format Alpy** ([`format_alpy`](https://github.com/ISCOUTB/alpy)) instalado y configurado.
 
 ---
 
