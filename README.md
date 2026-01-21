@@ -11,6 +11,8 @@ Este plugin elimina la necesidad de gestionar manualmente las etiquetas (tags) d
 - [Instalación](#instalación)
 - [Uso](#uso)
 - [API para Desarrolladores](#api-para-desarrolladores)
+- [Contribuciones](#contribuciones)
+- [Equipo de desarrollo](#equipo-de-desarrollo)
 
 ---
 
