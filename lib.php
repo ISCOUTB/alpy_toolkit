@@ -134,7 +134,7 @@ function local_alpy_toolkit_coursemodule_edit_post_actions($moduleinfo, $course)
  * @param global_navigation $nav
  */
 function local_alpy_toolkit_extend_navigation(global_navigation $nav) {
-    global $PAGE;
+    global $PAGE, $CFG;
     
     // Inject the Dynamic CSS file
     // This file determines the user's courses and outputs CSS to replace icons
