@@ -56,17 +56,38 @@ if (empty($course_ids)) {
 }
 
 // 2. Find all Alpy-tagged modules within these courses
-// We need: cm.id, tag.rawname
+// We need: cm.id, cm.instance, m.name (modulename), tag.rawname
 list($insql, $inparams) = $DB->get_in_or_equal($course_ids);
 
-$sql = "SELECT cm.id, t.rawname
+$sql = "SELECT cm.id, cm.instance, m.name as modulename, t.rawname
           FROM {course_modules} cm
+          JOIN {modules} m ON m.id = cm.module
           JOIN {context} ctx ON (ctx.instanceid = cm.id AND ctx.contextlevel = " . CONTEXT_MODULE . ")
           JOIN {tag_instance} ti ON (ti.component = 'core' AND ti.itemtype = 'course_modules' AND ti.itemid = cm.id)
           JOIN {tag} t ON ti.tagid = t.id
          WHERE cm.course $insql";
 
 $records = $DB->get_records_sql($sql, $inparams);
+
+// Pre-fetch calendar events for these courses to optimize Upcoming Events targeting
+// We need to map (modulename, instanceid) -> [eventid1, eventid2...]
+$events_by_instance = [];
+$events_sql = "SELECT id, modulename, instance 
+                 FROM {event} 
+                WHERE courseid $insql 
+                  AND modulename IS NOT NULL 
+                  AND instance IS NOT NULL";
+$events = $DB->get_recordset_sql($events_sql, $inparams);
+foreach ($events as $event) {
+    if (!isset($events_by_instance[$event->modulename])) {
+        $events_by_instance[$event->modulename] = [];
+    }
+    if (!isset($events_by_instance[$event->modulename][$event->instance])) {
+        $events_by_instance[$event->modulename][$event->instance] = [];
+    }
+    $events_by_instance[$event->modulename][$event->instance][] = $event->id;
+}
+$events->close();
 
 // 3. Generate CSS
 echo "/** Alpy Toolkit Dynamic Icon Replacement **/\n";
@@ -114,8 +135,13 @@ foreach ($records as $rec) {
         // 3. We set the new icon as the background image of the <img> element itself.
         // 4. We use box-sizing: border-box to include padding in the total width.
         
-        $cssProperties = "
-            /* Padding 'Mask' Technique (Restored as requested) */
+        $containerCssProperties = "
+            background-color: #e5f2fe !important;
+            border: 1px solid rgba(40, 130, 211, 0.1) !important;
+        ";
+
+        $imgCssProperties = "
+            /* Padding 'Mask' Technique */
             box-sizing: border-box !important;
             width: 24px !important;
             height: 24px !important;
@@ -128,35 +154,90 @@ foreach ($records as $rec) {
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center center !important;
+            
+            filter: none !important;
+            border-radius: 0 !important;
         ";
 
         // 1. TIMELINE BLOCK
-        // Use :has() to find the list item containing the specific activity link
-        echo ".block_timeline .list-group-item:has(a[href*='id={$cmid}']) .activityiconcontainer img {\n";
-        echo $cssProperties;
+        // Container
+        echo ".block_timeline .list-group-item:has(a[href*='id={$cmid}']) .activityiconcontainer {\n";
+        echo $containerCssProperties;
+        echo "}\n";
+        // Image - targeting specific classes to override Moodle's !important filters
+        echo ".block_timeline .list-group-item:has(a[href*='id={$cmid}']) .activityiconcontainer img.activityicon,\n";
+        echo ".block_timeline .list-group-item:has(a[href*='id={$cmid}']) .activityiconcontainer img.icon {\n";
+        echo $imgCssProperties;
         echo "}\n";
 
         // 2. RECENTLY ACCESSED ITEMS BLOCK
-        // The anchor itself wraps the content
-        echo ".block_recentlyaccesseditems a[href*='id={$cmid}'] .activityiconcontainer img {\n";
-        echo $cssProperties;
+        // Container
+        echo ".block_recentlyaccesseditems a[href*='id={$cmid}'] .activityiconcontainer {\n";
+        echo $containerCssProperties;
+        echo "}\n";
+        // Image - Increased specificity to beat .activityiconcontainer.assessment .activityicon
+        echo ".block_recentlyaccesseditems a[href*='id={$cmid}'] .activityiconcontainer img.activityicon,\n";
+        echo ".block_recentlyaccesseditems a[href*='id={$cmid}'] .activityiconcontainer img.icon {\n";
+        echo $imgCssProperties;
         echo "}\n";
 
-        // 3. UPCOMING EVENTS BLOCK
-        // Covers the side block and the expanded view
-        echo ".block_upcoming .event:has(a[href*='id={$cmid}']) .activityiconcontainer img {\n";
-        echo $cssProperties;
-        echo "}\n";
+        // 3. UPCOMING EVENTS BLOCK AND CALENDAR EVENTS
+        if (isset($events_by_instance[$rec->modulename]) && isset($events_by_instance[$rec->modulename][$rec->instance])) {
+            foreach ($events_by_instance[$rec->modulename][$rec->instance] as $eventid) {
+                // 3.A UPCOMING EVENTS BLOCK
+                // Container
+                echo ".block_calendar_upcoming .event:has(a[data-event-id='{$eventid}']) .activityiconcontainer,\n";
+                echo ".block_upcoming .event:has(a[data-event-id='{$eventid}']) .activityiconcontainer {\n";
+                echo $containerCssProperties;
+                echo "}\n";
+                // Image
+                echo ".block_calendar_upcoming .event:has(a[data-event-id='{$eventid}']) .activityiconcontainer img.activityicon,\n";
+                echo ".block_upcoming .event:has(a[data-event-id='{$eventid}']) .activityiconcontainer img.activityicon,\n";
+                echo ".block_calendar_upcoming .event:has(a[data-event-id='{$eventid}']) .activityiconcontainer img.icon,\n";
+                echo ".block_upcoming .event:has(a[data-event-id='{$eventid}']) .activityiconcontainer img.icon {\n";
+                echo $imgCssProperties;
+                echo "}\n";
+                
+                // 3.B CALENDAR VIEW
+                $calendarImgCss = "
+                    box-sizing: border-box !important;
+                    width: 16px !important; 
+                    height: 16px !important;
+                    padding-left: 16px !important;
+                    padding-right: 0 !important;
+                    padding-top: 0 !important;
+                    padding-bottom: 0 !important;
+                    
+                    background-image: url('{$iconUrl}') !important;
+                    background-size: contain !important;
+                    background-repeat: no-repeat !important;
+                    background-position: center center !important;
+                    
+                    filter: none !important; 
+                    border-radius: 0 !important;
+                ";
+                
+                // Target the icon inside the event card header in calendar view
+                echo ".calendarwrapper .event[data-event-id='{$eventid}'] .box img.icon,\n";
+                echo ".calendarwrapper .event[data-event-id='{$eventid}'] .card-header img.icon {\n";
+                echo $calendarImgCss;
+                echo "}\n";
+            }
+        }
 
         // 4. SINGLE ACTIVITY HEADER
-        // When viewing the activity page itself, Moodle adds a 'cmid-ID' class to the body.
+        // Container
+        echo "body.cmid-{$cmid} .page-header .activityiconcontainer, \n";
+        echo "body.cmid-{$cmid} .page-context-header .activityiconcontainer, \n";
+        echo "body.cmid-{$cmid} .activity-header .activityiconcontainer {\n";
+        echo $containerCssProperties;
+        echo "}\n";
+        
+        // Image
         echo "body.cmid-{$cmid} .page-header .activityiconcontainer img, \n";
-        echo "body.cmid-{$cmid} .page-header img.icon, \n"; // Some themes use generic .icon class
-        echo "body.cmid-{$cmid} .page-context-header .page-header-image img, \n"; // Common in non-Boost themes
         echo "body.cmid-{$cmid} .page-context-header .activityiconcontainer img, \n";
-        echo "body.cmid-{$cmid} .page-context-header img.icon, \n";
         echo "body.cmid-{$cmid} .activity-header .activityiconcontainer img {\n";
-        echo $cssProperties;
+        echo $imgCssProperties;
         echo "}\n\n";
     }
 }
